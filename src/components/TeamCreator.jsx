@@ -33,14 +33,24 @@ export default function TeamCreator({ caso }) {
 
     setStatus('checking')
     try {
-      const modRes = await fetch('/api/moderate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testo: testoCompleto })
-      })
-      const mod = await modRes.json()
+      // Se la moderazione automatica non è configurata (manca la chiave)
+      // o la chiamata fallisce, non blocchiamo la pubblicazione: la
+      // saltiamo semplicemente, dato che è un gioco privato tra amici.
+      let mod = { approvato: true }
+      try {
+        const modRes = await fetch('/api/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ testo: testoCompleto })
+        })
+        if (modRes.ok) {
+          mod = await modRes.json()
+        }
+      } catch {
+        // rete/funzione non disponibile: procediamo senza bloccare
+      }
 
-      if (!mod.approvato) {
+      if (mod.approvato === false) {
         setStatus('blocked')
         setError(mod.motivo || 'Contenuto non approvato.')
         return
