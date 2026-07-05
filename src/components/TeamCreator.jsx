@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-function EditForm({ squadra, onSalvato, onAnnulla }) {
-  const [nomeUtente, setNomeUtente] = useState(squadra.nome_utente)
-  const [personaggi, setPersonaggi] = useState(squadra.personaggi || [])
-  const [colpevole, setColpevole] = useState(squadra.colpevole || '')
-  const [movente, setMovente] = useState(squadra.movente || '')
-  const [indiziText, setIndiziText] = useState((squadra.indizi_disseminati || []).join('\n'))
-  const [saving, setSaving] = useState(false)
+export default function TeamCreator({ caso }) {
+  const [nomeUtente, setNomeUtente] = useState('')
+  const [personaggi, setPersonaggi] = useState(
+    (caso?.ruoli || []).map((ruolo) => ({ ruolo, nome: '', descrizione: '' }))
+  )
+  const [colpevole, setColpevole] = useState('')
+  const [movente, setMovente] = useState('')
+  const [indiziText, setIndiziText] = useState('')
+  const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
 
   function aggiornaPersonaggio(idx, campo, valore) {
@@ -16,42 +18,77 @@ function EditForm({ squadra, onSalvato, onAnnulla }) {
     )
   }
 
-  async function salva() {
-    setSaving(true)
+  async function invia() {
     setError(null)
-    try {
-      const { error: updateError } = await supabase
-        .from('squadre')
-        .update({
-          nome_utente: nomeUtente,
-          personaggi,
-          colpevole,
-          movente,
-          indizi_disseminati: indiziText.split('\n').map((s) => s.trim()).filter(Boolean)
-        })
-        .eq('id', squadra.id)
+    if (!nomeUtente || !colpevole || !movente) {
+      setError('Compila nome utente, colpevole e movente.')
+      return
+    }
 
-      if (updateError) throw updateError
-      onSalvato()
+    const testoCompleto = [
+      ...personaggi.map((p) => `${p.ruolo}: ${p.nome} - ${p.descrizione}`),
+      `Movente: ${movente}`,
+      `Indizi disseminati: ${indiziText}`
+    ].join('\n')
+
+    setStatus('checking')
+    try {
+      let mod = { approvato: true }
+      try {
+        const modRes = await fetch('/api/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ testo: testoCompleto })
+        })
+        if (modRes.ok) {
+          mod = await modRes.json()
+        }
+      } catch {
+        // rete/funzione non disponibile: procediamo senza bloccare
+      }
+
+      if (mod.approvato === false) {
+        setStatus('blocked')
+        setError(mod.motivo || 'Contenuto non approvato.')
+        return
+      }
+
+      const { error: insertError } = await supabase.from('squadre').insert({
+        nome_utente: nomeUtente,
+        caso_id: caso.id,
+        personaggi,
+        colpevole,
+        movente,
+        indizi_disseminati: indiziText.split('\n').filter(Boolean),
+        approvato: true
+      })
+      if (insertError) throw insertError
+
+      setStatus('saved')
     } catch (err) {
       setError(err.message)
-    } finally {
-      setSaving(false)
+      setStatus(null)
     }
+  }
+
+  if (!caso) {
+    return <p style={{ color: '#666' }}>Genera prima un caso per poter creare la tua squadra.</p>
   }
 
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Modifica squadra</h3>
-
-      <label>Nome utente</label>
-      <input value={nomeUtente} onChange={(e) => setNomeUtente(e.target.value)} />
+      <h3>Crea la tua squadra per: {caso.titolo}</h3>
+      <input
+        placeholder="Il tuo nome utente"
+        value={nomeUtente}
+        onChange={(e) => setNomeUtente(e.target.value)}
+      />
 
       {personaggi.map((p, idx) => (
         <div key={idx} style={{ marginBottom: 12 }}>
           <strong style={{ fontSize: 13 }}>{p.ruolo}</strong>
           <input
-            placeholder="Nome del personaggio"
+            placeholder="Nome del personaggio (di fantasia)"
             value={p.nome}
             onChange={(e) => aggiornaPersonaggio(idx, 'nome', e.target.value)}
           />
@@ -64,139 +101,22 @@ function EditForm({ squadra, onSalvato, onAnnulla }) {
         </div>
       ))}
 
-      <label>Colpevole segreto</label>
+      <label style={{ fontSize: 13, fontWeight: 500 }}>Colpevole segreto (nome di uno dei personaggi sopra)</label>
       <input value={colpevole} onChange={(e) => setColpevole(e.target.value)} />
 
-      <label>Movente</label>
+      <label style={{ fontSize: 13, fontWeight: 500 }}>Movente</label>
       <textarea rows={2} value={movente} onChange={(e) => setMovente(e.target.value)} />
 
-      <label>Indizi disseminati (uno per riga)</label>
+      <label style={{ fontSize: 13, fontWeight: 500 }}>Indizi che disseminerai per gli altri giocatori (uno per riga)</label>
       <textarea rows={3} value={indiziText} onChange={(e) => setIndiziText(e.target.value)} />
 
       {error && <div className="error">{error}</div>}
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button className="primary" onClick={salva} disabled={saving}>
-          {saving ? 'Salvataggio...' : 'Salva modifiche'}
-        </button>
-        <button className="secondary" onClick={onAnnulla} disabled={saving}>
-          Annulla
-        </button>
-      </div>
-    </div>
-  )
-}
+      <button className="primary" onClick={invia} disabled={status === 'checking'}>
+        {status === 'checking' ? 'Controllo in corso...' : 'Pubblica la mia squadra'}
+      </button>
 
-export default function TeamsList({ caso }) {
-  const [squadre, setSquadre] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [modificaId, setModificaId] = useState(null)
-
-  async function carica() {
-    setLoading(true)
-    setError(null)
-    try {
-      let query = supabase
-        .from('squadre')
-        .select('id, nome_utente, personaggi, colpevole, movente, indizi_disseminati, created_at')
-        .order('created_at', { ascending: false })
-
-      if (caso?.id) {
-        query = query.eq('caso_id', caso.id)
-      }
-
-      const { data, error: fetchError } = await query
-      if (fetchError) throw fetchError
-      setSquadre(data || [])
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    carica()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caso?.id])
-
-  async function elimina(id) {
-    if (!window.confirm('Eliminare questa squadra? L\'azione non è reversibile.')) return
-    try {
-      const { error: deleteError } = await supabase.from('squadre').delete().eq('id', id)
-      if (deleteError) throw deleteError
-      setSquadre((prev) => prev.filter((s) => s.id !== id))
-    } catch (err) {
-      alert('Errore durante l\'eliminazione: ' + err.message)
-    }
-  }
-
-  return (
-    <div>
-      <div className="card">
-        <strong>Squadre pubblicate</strong>
-        <p style={{ margin: '4px 0 0', fontSize: 13, color: '#666' }}>
-          Modalità beta: chiunque può modificare o eliminare una squadra da qui.
-        </p>
-      </div>
-
-      {loading && <p style={{ color: '#666', fontSize: 14 }}>Caricamento...</p>}
-      {error && <div className="error">{error}</div>}
-
-      {!loading && squadre.length === 0 && (
-        <p style={{ color: '#666', fontSize: 14 }}>Nessuna squadra pubblicata ancora.</p>
-      )}
-
-      {squadre.map((s) =>
-        modificaId === s.id ? (
-          <EditForm
-            key={s.id}
-            squadra={s}
-            onAnnulla={() => setModificaId(null)}
-            onSalvato={() => {
-              setModificaId(null)
-              carica()
-            }}
-          />
-        ) : (
-          <div className="card" key={s.id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <h3 style={{ marginTop: 0 }}>{s.nome_utente}</h3>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="secondary" onClick={() => setModificaId(s.id)}>
-                  Modifica
-                </button>
-                <button className="secondary" onClick={() => elimina(s.id)}>
-                  Elimina
-                </button>
-              </div>
-            </div>
-
-            <strong>Personaggi</strong>
-            <ul>
-              {(s.personaggi || []).map((p, idx) => (
-                <li key={idx}>
-                  <strong>{p.ruolo}:</strong> {p.nome} — {p.descrizione}
-                </li>
-              ))}
-            </ul>
-
-            <strong>Colpevole segreto</strong>
-            <p>{s.colpevole}</p>
-
-            <strong>Movente</strong>
-            <p>{s.movente}</p>
-
-            <strong>Indizi disseminati</strong>
-            <ul>
-              {(s.indizi_disseminati || []).map((i, idx) => (
-                <li key={idx}>{i}</li>
-              ))}
-            </ul>
-          </div>
-        )
-      )}
+      {status === 'saved' && <p style={{ color: 'green', fontSize: 13 }}>Squadra pubblicata!</p>}
     </div>
   )
 }
