@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-export default function TeamCreator({ caso }) {
-  const [nomeUtente, setNomeUtente] = useState('')
+export default function TeamCreator({ caso, utente }) {
+  const [nomeUtente] = useState(utente || '')
   const [personaggi, setPersonaggi] = useState(
     (caso?.ruoli || []).map((ruolo) => ({ ruolo, nome: '', descrizione: '' }))
   )
