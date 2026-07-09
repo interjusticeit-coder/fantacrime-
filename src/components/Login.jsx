@@ -76,42 +76,64 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="card" style={{ maxWidth: 360, margin: '48px auto' }}>
-      <h3 style={{ marginTop: 0, textAlign: 'center' }}>Fantacrime</h3>
+    <div className="login-screen">
+      <div className="login-blob-1"></div>
+      <div className="login-blob-2"></div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div className="login-content">
+        <div className="login-logo-row">
+          <div className="login-logo-box">F</div>
+          <div className="login-brand">Fantacrime</div>
+        </div>
+
+        <div className="login-headline">Un nuovo caso ti aspetta ogni settimana.</div>
+        <div className="login-subline">
+          Crea la tua squadra, disseminale indizi e scopri chi indovina il colpevole.
+        </div>
+
+        <div className="login-toggle">
+          <button
+            className={modalita === 'accedi' ? 'active' : ''}
+            onClick={() => setModalita('accedi')}
+          >
+            Accedi
+          </button>
+          <button
+            className={modalita === 'registrati' ? 'active' : ''}
+            onClick={() => setModalita('registrati')}
+          >
+            Registrati
+          </button>
+        </div>
+
+        <div className="login-field-label">Nome utente</div>
+        <input
+          placeholder="es. investigatore92"
+          value={nomeUtente}
+          onChange={(e) => setNomeUtente(e.target.value)}
+        />
+
+        <div className="login-field-label">Password</div>
+        <input
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+
+        {error && <div className="error">{error}</div>}
+
         <button
-          className={modalita === 'accedi' ? 'primary' : 'secondary'}
-          style={{ flex: 1 }}
-          onClick={() => setModalita('accedi')}
+          className="primary"
+          style={{ width: '100%', marginTop: 6 }}
+          onClick={modalita === 'accedi' ? accedi : registrati}
+          disabled={loading}
         >
-          Accedi
+          {loading ? 'Un attimo...' : modalita === 'accedi' ? 'Accedi' : 'Crea account'}
         </button>
-        <button
-          className={modalita === 'registrati' ? 'primary' : 'secondary'}
-          style={{ flex: 1 }}
-          onClick={() => setModalita('registrati')}
-        >
-          Registrati
-        </button>
+
+        <div className="login-footnote">Beta interna · per un gruppo di amici</div>
       </div>
-
-      <label>Nome utente</label>
-      <input value={nomeUtente} onChange={(e) => setNomeUtente(e.target.value)} />
-
-      <label>Password</label>
-      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-
-      {error && <div className="error">{error}</div>}
-
-      <button
-        className="primary"
-        style={{ width: '100%' }}
-        onClick={modalita === 'accedi' ? accedi : registrati}
-        disabled={loading}
-      >
-        {loading ? 'Un attimo...' : modalita === 'accedi' ? 'Accedi' : 'Crea account'}
-      </button>
     </div>
   )
 }
