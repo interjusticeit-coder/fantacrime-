@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Login from './components/Login'
 import CaseGenerator from './components/CaseGenerator'
 import Commenti from './components/Commenti'
+import Capitoli from './components/Capitoli'
 import TeamCreator from './components/TeamCreator'
 import TeamsList from './components/TeamsList'
 import Leaderboard from './components/Leaderboard'
@@ -53,6 +54,7 @@ export default function App() {
       {tab === 'caso' && (
         <>
           <CaseGenerator onCasoCreato={setCasoAttuale} utente={utente} />
+          <Capitoli caso={casoAttuale} />
           <Commenti caso={casoAttuale} utente={utente} />
         </>
       )}
