@@ -1,8 +1,9 @@
 // Funzione serverless Vercel: /api/evolvi-capitolo
 // Pensata per essere chiamata automaticamente da un Cron Job di Vercel
-// ogni lunedì (vedi vercel.json). Scrive il capitolo successivo del
-// caso attuale, ispirandosi a notizie reali e alle teorie dei giocatori,
-// e assegna punti a chi ci aveva visto giusto.
+// ogni lunedì (vedi vercel.json), oppure manualmente dal pulsante
+// "Aggiungi evento settimanale" nel sito. Scrive il capitolo successivo
+// del caso attuale, ispirandosi a notizie reali e alle teorie dei
+// giocatori, e assegna punti a chi ci aveva visto giusto.
 //
 // Resta "spenta" (risponde con un errore controllato, senza rompere
 // nulla) finché ANTHROPIC_API_KEY non è configurata su Vercel.
@@ -10,13 +11,6 @@
 import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
-  // Protezione: solo Vercel (col suo CRON_SECRET) o una chiamata manuale
-  // autorizzata può eseguire questa funzione.
-  const authHeader = req.headers['authorization']
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Non autorizzato' })
-  }
-
   const anthropicKey = process.env.ANTHROPIC_API_KEY
   if (!anthropicKey) {
     return res.status(200).json({
@@ -128,57 +122,4 @@ nessun blocco markdown, con questa struttura esatta:
 
     // Tra i blocchi di risposta, prendiamo l'ultimo blocco di testo
     // (quello dopo eventuali ricerche web)
-    const blocchiTesto = (data.content || []).filter((b) => b.type === 'text')
-    const rawText = blocchiTesto[blocchiTesto.length - 1]?.text
-    if (!rawText) {
-      return res.status(502).json({ error: 'Risposta vuota o inattesa', dettagli: JSON.stringify(data) })
-    }
-
-    const clean = rawText
-      .trim()
-      .replace(/^```json/, '')
-      .replace(/^```/, '')
-      .replace(/```$/, '')
-      .trim()
-
-    const parsed = JSON.parse(clean)
-
-    // 5. Salva il nuovo capitolo
-    const { data: nuovoCapitolo, error: insertError } = await supabase
-      .from('capitoli')
-      .insert({
-        caso_id: caso.id,
-        numero: prossimoNumero,
-        testo: parsed.testo,
-        tag: parsed.tag || 'normale',
-        eventi_reali: parsed.eventi_reali || []
-      })
-      .select()
-      .single()
-
-    if (insertError) throw insertError
-
-    // 6. Assegna punti a chi aveva teorie confermate
-    const teorieConfermate = parsed.teorie_confermate || []
-    for (const commentoId of teorieConfermate) {
-      const commento = (commenti || []).find((c) => c.id === commentoId)
-      if (!commento) continue
-
-      const { data: puntiEsistenti } = await supabase
-        .from('punteggi')
-        .select('punti')
-        .eq('utente', commento.nome_utente)
-        .maybeSingle()
-
-      const nuoviPunti = (puntiEsistenti?.punti || 0) + 10
-
-      await supabase
-        .from('punteggi')
-        .upsert({ utente: commento.nome_utente, punti: nuoviPunti, updated_at: new Date().toISOString() })
-    }
-
-    return res.status(200).json({ ok: true, capitolo: nuovoCapitolo })
-  } catch (err) {
-    return res.status(500).json({ error: 'Errore interno', dettagli: String(err) })
-  }
-}
+    const
