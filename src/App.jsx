@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Login from './components/Login'
 import CaseGenerator from './components/CaseGenerator'
+import Commenti from './components/Commenti'
 import TeamCreator from './components/TeamCreator'
 import TeamsList from './components/TeamsList'
 import Leaderboard from './components/Leaderboard'
@@ -49,7 +50,12 @@ export default function App() {
         </button>
       </nav>
 
-      {tab === 'caso' && <CaseGenerator onCasoCreato={setCasoAttuale} utente={utente} />}
+      {tab === 'caso' && (
+        <>
+          <CaseGenerator onCasoCreato={setCasoAttuale} utente={utente} />
+          <Commenti caso={casoAttuale} utente={utente} />
+        </>
+      )}
       {tab === 'squadra' && <TeamCreator caso={casoAttuale} utente={utente} />}
       {tab === 'squadre' && <TeamsList caso={casoAttuale} />}
       {tab === 'classifica' && <Leaderboard />}
