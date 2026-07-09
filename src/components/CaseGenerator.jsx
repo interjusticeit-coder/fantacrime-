@@ -18,6 +18,8 @@ export default function CaseGenerator({ onCasoCreato }) {
   const [form, setForm] = useState(CASO_VUOTO)
   const [opzioni, setOpzioni] = useState(null)
   const [scegliendo, setScegliendo] = useState(false)
+  const [generandoEvento, setGenerandoEvento] = useState(false)
+  const [eventoMsg, setEventoMsg] = useState(null)
 
   useEffect(() => {
     async function caricaUltimoCaso() {
@@ -133,22 +135,46 @@ export default function CaseGenerator({ onCasoCreato }) {
     }
   }
 
+  async function aggiungiEvento() {
+    setGenerandoEvento(true)
+    setEventoMsg(null)
+    setError(null)
+    try {
+      const res = await fetch('/api/evolvi-capitolo', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Errore generando l\'evento')
+
+      if (data.skipped) {
+        setEventoMsg(data.motivo || 'Nessun nuovo evento generato.')
+      } else {
+        setEventoMsg('Nuovo capitolo pubblicato! Ricarica per vederlo.')
+        setTimeout(() => window.location.reload(), 1500)
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setGenerandoEvento(false)
+    }
+  }
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <strong>Il cervellone</strong>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--soft)' }}>Genera il caso della settimana</p>
+      {!caso && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <strong>Il cervellone</strong>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--soft)' }}>Genera il caso della settimana</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="secondary" onClick={() => setShowManuale((v) => !v)}>
+              {showManuale ? 'Annulla' : 'Inserisci manualmente'}
+            </button>
+            <button className="primary" onClick={generaOpzioni} disabled={loading}>
+              {loading ? 'Sto pensando...' : 'Genera 3 opzioni'}
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="secondary" onClick={() => setShowManuale((v) => !v)}>
-            {showManuale ? 'Annulla' : 'Inserisci manualmente'}
-          </button>
-          <button className="primary" onClick={generaOpzioni} disabled={loading}>
-            {loading ? 'Sto pensando...' : 'Genera 3 opzioni'}
-          </button>
-        </div>
-      </div>
+      )}
 
       {error && <div className="error">{error}</div>}
 
@@ -257,6 +283,17 @@ export default function CaseGenerator({ onCasoCreato }) {
               <li key={idx}>{r}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {caso && (
+        <div style={{ marginTop: 4 }}>
+          <button className="secondary" style={{ width: '100%' }} onClick={aggiungiEvento} disabled={generandoEvento}>
+            {generandoEvento ? 'Il cervellone sta scrivendo...' : 'Aggiungi evento settimanale'}
+          </button>
+          {eventoMsg && (
+            <p style={{ fontSize: 13, color: 'var(--soft)', marginTop: 8, textAlign: 'center' }}>{eventoMsg}</p>
+          )}
         </div>
       )}
     </div>
