@@ -21,7 +21,7 @@ export default function TeamCreator({ caso, utente }) {
   async function invia() {
     setError(null)
     if (!nomeUtente || !colpevole || !movente) {
-      setError('Compila nome utente, colpevole e movente.')
+      setError('Compila colpevole e movente.')
       return
     }
 
@@ -78,11 +78,9 @@ export default function TeamCreator({ caso, utente }) {
   return (
     <div className="card">
       <h3>Crea la tua squadra per: {caso.titolo}</h3>
-      <input
-        placeholder="Il tuo nome utente"
-        value={nomeUtente}
-        onChange={(e) => setNomeUtente(e.target.value)}
-      />
+      <p style={{ fontSize: 13, color: '#666', marginTop: -8 }}>
+        Stai creando come <strong>{nomeUtente}</strong>
+      </p>
 
       {personaggi.map((p, idx) => (
         <div key={idx} style={{ marginBottom: 12 }}>
