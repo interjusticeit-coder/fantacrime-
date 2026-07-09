@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "vite"
+  "framework": "vite",
+  "crons": [
+    {
+      "path": "/api/evolvi-capitolo",
+      "schedule": "0 8 * * 1"
+    }
+  ]
 }
