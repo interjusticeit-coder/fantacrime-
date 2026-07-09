@@ -1,5 +1,5 @@
 // Funzione serverless Vercel: /api/generate-case
-// Genera un nuovo caso di fantasia usando Claude, ed evita ripetizioni
+// Genera un nuovo caso di fantasia usando Google Gemini, ed evita ripetizioni
 // controllando gli ultimi casi già usati (passati dal frontend o dal DB).
 
 export default async function handler(req, res) {
@@ -7,9 +7,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Metodo non consentito' })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY non configurata' })
+    return res.status(500).json({ error: 'GEMINI_API_KEY non configurata' })
   }
 
   const { casiPrecedenti = [] } = req.body || {}
@@ -35,28 +35,36 @@ Rispondi SOLO con un oggetto JSON valido, nessun testo prima o dopo, nessun bloc
 }`
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    })
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            maxOutputTokens: 1000,
+            responseMimeType: 'application/json'
+          }
+        })
+      }
+    )
 
     if (!response.ok) {
       const errText = await response.text()
-      return res.status(502).json({ error: 'Errore chiamando Claude', dettagli: errText })
+      return res.status(502).json({ error: 'Errore chiamando Gemini', dettagli: errText })
     }
 
     const data = await response.json()
-    const textBlock = data.content.find((b) => b.type === 'text')
-    const clean = textBlock.text
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!rawText) {
+      return res.status(502).json({ error: 'Risposta Gemini vuota o inattesa', dettagli: JSON.stringify(data) })
+    }
+
+    const clean = rawText
       .trim()
       .replace(/^```json/, '')
       .replace(/^```/, '')
