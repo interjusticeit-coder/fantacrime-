@@ -6,6 +6,12 @@ import Capitoli from './components/Capitoli'
 import TeamCreator from './components/TeamCreator'
 import TeamsList from './components/TeamsList'
 import Leaderboard from './components/Leaderboard'
+import OnAir from './components/OnAir'
+
+function initials(name) {
+  if (!name) return '?'
+  return name.trim().slice(0, 2).toUpperCase()
+}
 
 export default function App() {
   const [utente, setUtente] = useState(null)
@@ -23,44 +29,65 @@ export default function App() {
   }
 
   if (!utente) {
-    return <Login onLogin={setUtente} />
+    return (
+      <div className="phone-shell">
+        <div className="phone-card">
+          <Login onLogin={setUtente} />
+        </div>
+      </div>
+    )
   }
 
+  const navItems = [
+    { key: 'caso', label: 'Caso' },
+    { key: 'squadra', label: 'Crea' },
+    { key: 'squadre', label: 'Squadre' },
+    { key: 'classifica', label: 'Classifica' },
+    { key: 'onda', label: 'In onda' }
+  ]
+
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Fantacrime</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 14, color: '#666' }}>{utente}</span>
-          <button className="secondary" onClick={esci}>Esci</button>
+    <div className="phone-shell">
+      <div className="phone-card">
+        <div className="app-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="app-logo">F</div>
+            <h1>Fantacrime</h1>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 13, color: 'var(--soft)', fontWeight: 500 }}>{utente}</span>
+            <div className="avatar-circle" onClick={esci} title="Esci">
+              {initials(utente)}
+            </div>
+          </div>
         </div>
-      </header>
 
-      <nav className="tabs">
-        <button className={tab === 'caso' ? 'active' : ''} onClick={() => setTab('caso')}>
-          Caso della settimana
-        </button>
-        <button className={tab === 'squadra' ? 'active' : ''} onClick={() => setTab('squadra')}>
-          Crea squadra
-        </button>
-        <button className={tab === 'squadre' ? 'active' : ''} onClick={() => setTab('squadre')}>
-          Squadre
-        </button>
-        <button className={tab === 'classifica' ? 'active' : ''} onClick={() => setTab('classifica')}>
-          Classifica
-        </button>
-      </nav>
+        <div className="app-content">
+          {tab === 'caso' && (
+            <>
+              <CaseGenerator onCasoCreato={setCasoAttuale} utente={utente} />
+              <Capitoli caso={casoAttuale} />
+              <Commenti caso={casoAttuale} utente={utente} />
+            </>
+          )}
+          {tab === 'squadra' && <TeamCreator caso={casoAttuale} utente={utente} />}
+          {tab === 'squadre' && <TeamsList caso={casoAttuale} />}
+          {tab === 'classifica' && <Leaderboard />}
+          {tab === 'onda' && <OnAir caso={casoAttuale} />}
+        </div>
 
-      {tab === 'caso' && (
-        <>
-          <CaseGenerator onCasoCreato={setCasoAttuale} utente={utente} />
-          <Capitoli caso={casoAttuale} />
-          <Commenti caso={casoAttuale} utente={utente} />
-        </>
-      )}
-      {tab === 'squadra' && <TeamCreator caso={casoAttuale} utente={utente} />}
-      {tab === 'squadre' && <TeamsList caso={casoAttuale} />}
-      {tab === 'classifica' && <Leaderboard />}
+        <nav className="tabs">
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              className={tab === item.key ? 'active' : ''}
+              onClick={() => setTab(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </div>
     </div>
   )
 }
