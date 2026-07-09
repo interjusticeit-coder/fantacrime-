@@ -1,17 +1,17 @@
 // Funzione serverless Vercel: /api/generate-case-options
-// Genera 3 proposte di caso (testo tramite Gemini) e per ciascuna
-// un'immagine di copertina a tema (tramite Imagen 4 Fast, stesso
-// provider/chiave di Gemini). L'utente sceglierà una delle 3 nel
-// frontend; solo quella scelta verrà salvata su Supabase.
+// Genera 3 proposte di caso (solo testo) usando Claude (Anthropic),
+// la stessa chiave già usata per il cervellone autonomo. Niente
+// immagini per ora: l'utente sceglie una delle 3 proposte testuali
+// nel frontend, e solo quella scelta verrà salvata su Supabase.
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Metodo non consentito' })
   }
 
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY non configurata' })
+  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  if (!anthropicKey) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY non configurata' })
   }
 
   const { casiPrecedenti = [] } = req.body || {}
@@ -41,84 +41,41 @@ Rispondi SOLO con un array JSON valido di 3 oggetti, nessun testo prima o dopo, 
 }`
 
   try {
-    const textResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: 2500,
-            responseMimeType: 'application/json'
-          }
-        })
-      }
-    )
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    })
 
-    if (!textResponse.ok) {
-      const errText = await textResponse.text()
-      return res.status(502).json({ error: 'Errore generando i testi', dettagli: errText })
+    if (!response.ok) {
+      const errText = await response.text()
+      return res.status(502).json({ error: 'Errore chiamando Claude', dettagli: errText })
     }
 
-    const textData = await textResponse.json()
-    const rawText = textData.candidates?.[0]?.content?.parts?.[0]?.text
+    const data = await response.json()
+    const rawText = data.content?.find((b) => b.type === 'text')?.text
     if (!rawText) {
-      return res.status(502).json({ error: 'Risposta testo vuota o inattesa', dettagli: JSON.stringify(textData) })
+      return res.status(502).json({ error: 'Risposta vuota o inattesa', dettagli: JSON.stringify(data) })
     }
 
-    const cleanText = rawText
+    const clean = rawText
       .trim()
       .replace(/^```json/, '')
       .replace(/^```/, '')
       .replace(/```$/, '')
       .trim()
 
-    const opzioni = JSON.parse(cleanText)
+    const opzioni = JSON.parse(clean)
 
-    // Per ciascuna opzione, generiamo un'immagine di copertina a tema
-    const opzioniConImmagine = await Promise.all(
-      opzioni.map(async (caso) => {
-        const promptImmagine = `Copertina illustrata in stile noir/giallo investigativo per un caso intitolato "${caso.titolo}". Ambientazione: ${caso.ambientazione}. Atmosfera misteriosa, tetra, elegante, senza testo scritto nell'immagine, senza persone riconoscibili, stile pittorico/illustrativo, non fotorealistico.`
-
-        try {
-          const imgResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-              },
-              body: JSON.stringify({
-                instances: [{ prompt: promptImmagine }],
-                parameters: { sampleCount: 1, aspectRatio: '1:1' }
-              })
-            }
-          )
-
-          if (!imgResponse.ok) {
-            return { ...caso, immagine_url: null }
-          }
-
-          const imgData = await imgResponse.json()
-          const pred = imgData.predictions?.[0]
-          if (!pred?.bytesBase64Encoded) {
-            return { ...caso, immagine_url: null }
-          }
-
-          const mime = pred.mimeType || 'image/png'
-          return { ...caso, immagine_url: `data:${mime};base64,${pred.bytesBase64Encoded}` }
-        } catch {
-          return { ...caso, immagine_url: null }
-        }
-      })
-    )
-
-    return res.status(200).json({ opzioni: opzioniConImmagine })
+    return res.status(200).json({ opzioni })
   } catch (err) {
     return res.status(500).json({ error: 'Errore interno', dettagli: String(err) })
   }
