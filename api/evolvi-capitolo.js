@@ -122,4 +122,88 @@ nessun blocco markdown, con questa struttura esatta:
 
     // Tra i blocchi di risposta, prendiamo l'ultimo blocco di testo
     // (quello dopo eventuali ricerche web)
-    const
+    const blocchiTesto = (data.content || []).filter((b) => b.type === 'text')
+    const testoGrezzo = blocchiTesto.length
+      ? blocchiTesto[blocchiTesto.length - 1].text
+      : ''
+
+    if (!testoGrezzo) {
+      return res.status(502).json({ error: 'Claude non ha restituito testo', dettagli: data })
+    }
+
+    // Claude a volte avvolge il JSON in ```json ... ``` nonostante le
+    // istruzioni: ripuliamo prima di fare il parse
+    const testoPulito = testoGrezzo
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```\s*$/i, '')
+      .trim()
+
+    let capitoloGenerato
+    try {
+      capitoloGenerato = JSON.parse(testoPulito)
+    } catch (parseErr) {
+      return res.status(502).json({
+        error: 'Risposta di Claude non era JSON valido',
+        dettagli: testoGrezzo
+      })
+    }
+
+    const {
+      testo,
+      tag,
+      eventi_reali: eventiReali,
+      teorie_confermate: teorieConfermate,
+      teorie_smentite: teorieSmentite
+    } = capitoloGenerato
+
+    if (!testo) {
+      return res.status(502).json({ error: 'Il capitolo generato non contiene "testo"', dettagli: capitoloGenerato })
+    }
+
+    // 5. Salva il nuovo capitolo
+    const { data: nuovoCapitolo, error: insertError } = await supabase
+      .from('capitoli')
+      .insert({
+        caso_id: caso.id,
+        numero: prossimoNumero,
+        testo,
+        tag: tag || 'normale',
+        eventi_reali: eventiReali || []
+      })
+      .select()
+      .single()
+
+    if (insertError) throw insertError
+
+    // 6. Assegna punti a chi aveva teorie confermate/smentite
+    const idConfermate = teorieConfermate || []
+    const idSmentite = teorieSmentite || []
+
+    if (idConfermate.length) {
+      const { error: confError } = await supabase
+        .from('commenti')
+        .update({ punti_guadagnati: 10, esito: 'confermata' })
+        .in('id', idConfermate)
+      if (confError) throw confError
+    }
+
+    if (idSmentite.length) {
+      const { error: smentError } = await supabase
+        .from('commenti')
+        .update({ punti_guadagnati: -5, esito: 'smentita' })
+        .in('id', idSmentite)
+      if (smentError) throw smentError
+    }
+
+    return res.status(200).json({
+      ok: true,
+      capitolo: nuovoCapitolo,
+      teorie_confermate: idConfermate,
+      teorie_smentite: idSmentite
+    })
+  } catch (err) {
+    console.error('Errore in evolvi-capitolo:', err)
+    return res.status(500).json({ error: 'Errore interno', dettagli: err.message })
+  }
+}
