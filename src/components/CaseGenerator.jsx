@@ -76,8 +76,7 @@ export default function CaseGenerator({ onCasoCreato }) {
           titolo: opzione.titolo,
           scena: opzione.scena,
           indizi: opzione.indizi,
-          ruoli: opzione.ruoli,
-          immagine_url: opzione.immagine_url || null
+          ruoli: opzione.ruoli
         })
         .select()
         .single()
@@ -161,13 +160,6 @@ export default function CaseGenerator({ onCasoCreato }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {opzioni.map((op, idx) => (
               <div className="card" key={idx}>
-                {op.immagine_url && (
-                  <img
-                    src={op.immagine_url}
-                    alt={op.titolo}
-                    style={{ width: '100%', borderRadius: 10, marginBottom: 12, aspectRatio: '1/1', objectFit: 'cover' }}
-                  />
-                )}
                 <span className="badge badge-purple">{op.ambientazione}</span>
                 <span className="badge badge-coral">{op.metodo}</span>
                 <h3 style={{ marginBottom: 4 }}>{op.titolo}</h3>
@@ -249,13 +241,6 @@ export default function CaseGenerator({ onCasoCreato }) {
 
       {caso && (
         <div className="card">
-          {caso.immagine_url && (
-            <img
-              src={caso.immagine_url}
-              alt={caso.titolo}
-              style={{ width: '100%', borderRadius: 10, marginBottom: 12, aspectRatio: '1/1', objectFit: 'cover' }}
-            />
-          )}
           <span className="badge badge-purple">{caso.ambientazione}</span>
           <span className="badge badge-coral">{caso.metodo}</span>
           <h3>{caso.titolo}</h3>
