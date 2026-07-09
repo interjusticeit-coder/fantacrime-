@@ -1,119 +1,279 @@
-// Funzione serverless Vercel: /api/generate-case-options
-// Genera 3 proposte di caso (testo tramite Gemini) e per ciascuna
-// un'immagine di copertina a tema (tramite Imagen 4 Fast, stesso
-// provider/chiave di Gemini). L'utente sceglierà una delle 3 nel
-// frontend; solo quella scelta verrà salvata su Supabase.
+import { useState, useEffect } from 'react'
+import { supabase } from '../supabaseClient'
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Metodo non consentito' })
-  }
+const CASO_VUOTO = {
+  ambientazione: '',
+  metodo: '',
+  titolo: '',
+  scena: '',
+  indizi: '',
+  ruoli: ''
+}
 
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY non configurata' })
-  }
+export default function CaseGenerator({ onCasoCreato }) {
+  const [loading, setLoading] = useState(false)
+  const [caso, setCaso] = useState(null)
+  const [error, setError] = useState(null)
+  const [showManuale, setShowManuale] = useState(false)
+  const [form, setForm] = useState(CASO_VUOTO)
+  const [opzioni, setOpzioni] = useState(null)
+  const [scegliendo, setScegliendo] = useState(false)
 
-  const { casiPrecedenti = [] } = req.body || {}
+  useEffect(() => {
+    async function caricaUltimoCaso() {
+      const { data } = await supabase
+        .from('casi')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-  const evitaRipetizioni = casiPrecedenti.length
-    ? `Evita queste ambientazioni/metodi già usati di recente: ${casiPrecedenti
-        .map((c) => `${c.ambientazione} / ${c.metodo}`)
-        .join(', ')}.`
-    : ''
+      if (data) {
+        setCaso(data)
+        onCasoCreato?.(data)
+      }
+    }
+    caricaUltimoCaso()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const prompt = `Genera 3 proposte DIVERSE tra loro di caso di fantasia per un gioco settimanale chiamato "fantacrime", in italiano.
-Ogni caso deve essere completamente inventato (nessun riferimento a persone o eventi reali), tono da giallo classico, adatto come base che diverse squadre di giocatori personalizzeranno con propri personaggi e un proprio colpevole segreto.
-${evitaRipetizioni}
+  async function generaOpzioni() {
+    setLoading(true)
+    setError(null)
+    setOpzioni(null)
+    try {
+      const { data: precedenti } = await supabase
+        .from('casi')
+        .select('ambientazione, metodo')
+        .order('created_at', { ascending: false })
+        .limit(5)
 
-IMPORTANTE sui campi brevi:
-- "ambientazione" e "metodo" devono essere ETICHETTE BREVISSIME (1-3 parole, es. "Villa sul lago", "Avvelenamento"), NON frasi descrittive.
-- ogni voce di "ruoli" deve essere un'ETICHETTA BREVE del ruolo (es. "Il maggiordomo", "La vedova"), MAI una frase con dettagli o descrizioni.
-
-Rispondi SOLO con un array JSON valido di 3 oggetti, nessun testo prima o dopo, nessun blocco markdown, con questa struttura esatta per ciascun oggetto:
-{
-  "ambientazione": "etichetta breve",
-  "metodo": "etichetta breve",
-  "titolo": "titolo breve ed evocativo",
-  "scena": "descrizione della scena del crimine in 2-3 frasi, senza rivelare un colpevole",
-  "indizi": ["indizio 1", "indizio 2", "indizio 3", "indizio 4"],
-  "ruoli": ["ruolo 1", "ruolo 2", "ruolo 3", "ruolo 4"]
-}`
-
-  try {
-    const textResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
+      const res = await fetch('/api/generate-case-options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: 2500,
-            responseMimeType: 'application/json'
-          }
-        })
-      }
-    )
-
-    if (!textResponse.ok) {
-      const errText = await textResponse.text()
-      return res.status(502).json({ error: 'Errore generando i testi', dettagli: errText })
-    }
-
-    const textData = await textResponse.json()
-    const rawText = textData.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!rawText) {
-      return res.status(502).json({ error: 'Risposta testo vuota o inattesa', dettagli: JSON.stringify(textData) })
-    }
-
-    const cleanText = rawText
-      .trim()
-      .replace(/^```json/, '')
-      .replace(/^```/, '')
-      .replace(/```$/, '')
-      .trim()
-
-    const opzioni = JSON.parse(cleanText)
-
-    // Per ciascuna opzione, generiamo un'immagine di copertina a tema
-    const opzioniConImmagine = await Promise.all(
-      opzioni.map(async (caso) => {
-        const promptImmagine = `Copertina illustrata in stile noir/giallo investigativo per un caso intitolato "${caso.titolo}". Ambientazione: ${caso.ambientazione}. Atmosfera misteriosa, tetra, elegante, senza testo scritto nell'immagine, senza persone riconoscibili, stile pittorico/illustrativo, non fotorealistico.`
-
-        try {
-          const imgResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key=${apiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                instances: [{ prompt: promptImmagine }],
-                parameters: { sampleCount: 1, aspectRatio: '1:1' }
-              })
-            }
-          )
-
-          if (!imgResponse.ok) {
-            return { ...caso, immagine_url: null }
-          }
-
-          const imgData = await imgResponse.json()
-          const pred = imgData.predictions?.[0]
-          if (!pred?.bytesBase64Encoded) {
-            return { ...caso, immagine_url: null }
-          }
-
-          const mime = pred.mimeType || 'image/png'
-          return { ...caso, immagine_url: `data:${mime};base64,${pred.bytesBase64Encoded}` }
-        } catch {
-          return { ...caso, immagine_url: null }
-        }
+        body: JSON.stringify({ casiPrecedenti: precedenti || [] })
       })
-    )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Errore generazione')
 
-    return res.status(200).json({ opzioni: opzioniConImmagine })
-  } catch (err) {
-    return res.status(500).json({ error: 'Errore interno', dettagli: String(err) })
+      setOpzioni(data.opzioni || [])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
+
+  async function scegliOpzione(opzione) {
+    setScegliendo(true)
+    setError(null)
+    try {
+      const { data: inserted, error: insertError } = await supabase
+        .from('casi')
+        .insert({
+          ambientazione: opzione.ambientazione,
+          metodo: opzione.metodo,
+          titolo: opzione.titolo,
+          scena: opzione.scena,
+          indizi: opzione.indizi,
+          ruoli: opzione.ruoli,
+          immagine_url: opzione.immagine_url || null
+        })
+        .select()
+        .single()
+
+      if (insertError) throw insertError
+
+      setCaso(inserted)
+      onCasoCreato?.(inserted)
+      setOpzioni(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setScegliendo(false)
+    }
+  }
+
+  async function salvaCasoManuale(e) {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    try {
+      const indiziArray = form.indizi.split('\n').map((s) => s.trim()).filter(Boolean)
+      const ruoliArray = form.ruoli.split('\n').map((s) => s.trim()).filter(Boolean)
+
+      if (!form.ambientazione || !form.metodo || !form.titolo || !form.scena) {
+        throw new Error('Compila tutti i campi obbligatori.')
+      }
+      if (indiziArray.length === 0) throw new Error('Inserisci almeno un indizio.')
+      if (ruoliArray.length === 0) throw new Error('Inserisci almeno un ruolo.')
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('casi')
+        .insert({
+          ambientazione: form.ambientazione,
+          metodo: form.metodo,
+          titolo: form.titolo,
+          scena: form.scena,
+          indizi: indiziArray,
+          ruoli: ruoliArray
+        })
+        .select()
+        .single()
+
+      if (insertError) throw insertError
+
+      setCaso(inserted)
+      onCasoCreato?.(inserted)
+      setForm(CASO_VUOTO)
+      setShowManuale(false)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <strong>Il cervellone</strong>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--soft)' }}>Genera il caso della settimana</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="secondary" onClick={() => setShowManuale((v) => !v)}>
+            {showManuale ? 'Annulla' : 'Inserisci manualmente'}
+          </button>
+          <button className="primary" onClick={generaOpzioni} disabled={loading}>
+            {loading ? 'Sto pensando...' : 'Genera 3 opzioni'}
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {opzioni && (
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: 'var(--soft)', marginBottom: 12 }}>
+            Scegli il caso che diventerà quello ufficiale della settimana:
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {opzioni.map((op, idx) => (
+              <div className="card" key={idx}>
+                {op.immagine_url && (
+                  <img
+                    src={op.immagine_url}
+                    alt={op.titolo}
+                    style={{ width: '100%', borderRadius: 10, marginBottom: 12, aspectRatio: '1/1', objectFit: 'cover' }}
+                  />
+                )}
+                <span className="badge badge-purple">{op.ambientazione}</span>
+                <span className="badge badge-coral">{op.metodo}</span>
+                <h3 style={{ marginBottom: 4 }}>{op.titolo}</h3>
+                <p style={{ fontSize: 13.5 }}>{op.scena}</p>
+                <button
+                  className="primary"
+                  style={{ width: '100%' }}
+                  onClick={() => scegliOpzione(op)}
+                  disabled={scegliendo}
+                >
+                  {scegliendo ? 'Salvataggio...' : 'Scegli questo caso'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showManuale && (
+        <form className="card" onSubmit={salvaCasoManuale}>
+          <strong>Inserisci il caso manualmente</strong>
+          <p style={{ margin: '4px 0 12px', fontSize: 13, color: 'var(--soft)' }}>
+            Utile se preferisci scrivere tu il caso invece di generarlo.
+          </p>
+
+          <label>Ambientazione</label>
+          <input
+            type="text"
+            placeholder="Es. Villa di campagna"
+            value={form.ambientazione}
+            onChange={(e) => setForm({ ...form, ambientazione: e.target.value })}
+          />
+
+          <label>Metodo</label>
+          <input
+            type="text"
+            placeholder="Es. Avvelenamento"
+            value={form.metodo}
+            onChange={(e) => setForm({ ...form, metodo: e.target.value })}
+          />
+
+          <label>Titolo del caso</label>
+          <input
+            type="text"
+            placeholder="Es. Il giardino silenzioso"
+            value={form.titolo}
+            onChange={(e) => setForm({ ...form, titolo: e.target.value })}
+          />
+
+          <label>Scena del crimine</label>
+          <textarea
+            rows={4}
+            placeholder="Descrivi la scena..."
+            value={form.scena}
+            onChange={(e) => setForm({ ...form, scena: e.target.value })}
+          />
+
+          <label>Indizi (uno per riga)</label>
+          <textarea
+            rows={4}
+            placeholder={'Un bicchiere rotto in cucina\nUna finestra aperta sul retro'}
+            value={form.indizi}
+            onChange={(e) => setForm({ ...form, indizi: e.target.value })}
+          />
+
+          <label>Ruoli da personalizzare (uno per riga)</label>
+          <textarea
+            rows={4}
+            placeholder={'Il giardiniere\nLa governante\nL\'ospite misterioso'}
+            value={form.ruoli}
+            onChange={(e) => setForm({ ...form, ruoli: e.target.value })}
+          />
+
+          <button className="primary" type="submit" disabled={loading}>
+            {loading ? 'Salvataggio...' : 'Salva caso'}
+          </button>
+        </form>
+      )}
+
+      {caso && (
+        <div className="card">
+          {caso.immagine_url && (
+            <img
+              src={caso.immagine_url}
+              alt={caso.titolo}
+              style={{ width: '100%', borderRadius: 10, marginBottom: 12, aspectRatio: '1/1', objectFit: 'cover' }}
+            />
+          )}
+          <span className="badge badge-purple">{caso.ambientazione}</span>
+          <span className="badge badge-coral">{caso.metodo}</span>
+          <h3>{caso.titolo}</h3>
+          <p>{caso.scena}</p>
+          <strong>Indizi</strong>
+          <ul>
+            {caso.indizi.map((i, idx) => (
+              <li key={idx}>{i}</li>
+            ))}
+          </ul>
+          <strong>Ruoli da personalizzare</strong>
+          <ul>
+            {caso.ruoli.map((r, idx) => (
+              <li key={idx}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
 }
