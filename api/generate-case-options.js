@@ -42,10 +42,13 @@ Rispondi SOLO con un array JSON valido di 3 oggetti, nessun testo prima o dopo, 
 
   try {
     const textResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
@@ -83,10 +86,13 @@ Rispondi SOLO con un array JSON valido di 3 oggetti, nessun testo prima o dopo, 
 
         try {
           const imgResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict`,
             {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
               body: JSON.stringify({
                 instances: [{ prompt: promptImmagine }],
                 parameters: { sampleCount: 1, aspectRatio: '1:1' }
