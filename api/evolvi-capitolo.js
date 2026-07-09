@@ -120,28 +120,35 @@ nessun blocco markdown, con questa struttura esatta:
 
     const data = await response.json()
 
-    // Tra i blocchi di risposta, prendiamo l'ultimo blocco di testo
-    // (quello dopo eventuali ricerche web)
+    // Quando Claude usa web_search, la risposta può contenere più blocchi
+    // di testo (commenti prima/dopo le ricerche): li uniamo tutti così
+    // non perdiamo il JSON se non è nell'ultimo blocco
     const blocchiTesto = (data.content || []).filter((b) => b.type === 'text')
-    const testoGrezzo = blocchiTesto.length
-      ? blocchiTesto[blocchiTesto.length - 1].text
-      : ''
+    const testoGrezzo = blocchiTesto.map((b) => b.text).join('\n')
 
     if (!testoGrezzo) {
       return res.status(502).json({ error: 'Claude non ha restituito testo', dettagli: data })
     }
 
-    // Claude a volte avvolge il JSON in ```json ... ``` nonostante le
-    // istruzioni: ripuliamo prima di fare il parse
-    const testoPulito = testoGrezzo
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim()
+    // Claude a volte aggiunge commenti prima/dopo il JSON o lo avvolge in
+    // ```json ... ``` nonostante le istruzioni. Invece di fidarci che il
+    // blocco sia già pulito, estraiamo tutto ciò che sta tra la prima {
+    // e l'ultima } trovate nel testo.
+    const inizioJson = testoGrezzo.indexOf('{')
+    const fineJson = testoGrezzo.lastIndexOf('}')
+
+    if (inizioJson === -1 || fineJson === -1 || fineJson < inizioJson) {
+      return res.status(502).json({
+        error: 'Nessun JSON trovato nella risposta di Claude',
+        dettagli: testoGrezzo
+      })
+    }
+
+    const candidatoJson = testoGrezzo.slice(inizioJson, fineJson + 1)
 
     let capitoloGenerato
     try {
-      capitoloGenerato = JSON.parse(testoPulito)
+      capitoloGenerato = JSON.parse(candidatoJson)
     } catch (parseErr) {
       return res.status(502).json({
         error: 'Risposta di Claude non era JSON valido',
