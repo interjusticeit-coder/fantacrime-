@@ -7,7 +7,7 @@ const TAG_CLASSI = {
   normale: 'badge-purple'
 }
 
-export default function Capitoli({ caso }) {
+export default function Capitoli({ caso, onUltimoCapitolo }) {
   const [capitoli, setCapitoli] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -21,9 +21,15 @@ export default function Capitoli({ caso }) {
         .eq('caso_id', caso.id)
         .order('numero', { ascending: false })
       setCapitoli(data || [])
+      // Comunichiamo al componente padre qual è l'ultimo capitolo
+      // (il primo dell'array, dato che ordiniamo per numero decrescente),
+      // così altri componenti (es. il voto sul sospettato) sanno a quale
+      // round riferirsi.
+      onUltimoCapitolo?.(data?.[0] || null)
       setLoading(false)
     }
     carica()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caso?.id])
 
   if (!caso) return null
