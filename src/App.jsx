@@ -7,6 +7,7 @@ import TeamCreator from './components/TeamCreator'
 import TeamsList from './components/TeamsList'
 import Leaderboard from './components/Leaderboard'
 import OnAir from './components/OnAir'
+import VotoSospettato from './components/VotoSospettato'
 
 function initials(name) {
   if (!name) return '?'
@@ -17,6 +18,7 @@ export default function App() {
   const [utente, setUtente] = useState(null)
   const [tab, setTab] = useState('caso')
   const [casoAttuale, setCasoAttuale] = useState(null)
+  const [ultimoCapitolo, setUltimoCapitolo] = useState(null)
 
   useEffect(() => {
     const salvato = localStorage.getItem('fantacrime_utente')
@@ -66,7 +68,12 @@ export default function App() {
           {tab === 'caso' && (
             <>
               <CaseGenerator onCasoCreato={setCasoAttuale} utente={utente} />
-              <Capitoli caso={casoAttuale} />
+              <Capitoli caso={casoAttuale} onUltimoCapitolo={setUltimoCapitolo} />
+              <VotoSospettato
+                caso={casoAttuale}
+                utente={utente}
+                numeroCapitolo={ultimoCapitolo?.numero}
+              />
               <Commenti caso={casoAttuale} utente={utente} />
             </>
           )}
