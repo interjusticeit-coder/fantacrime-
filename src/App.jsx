@@ -1,3 +1,4 @@
+import Leaderboard from './Leaderboard'
 import { useState, useEffect } from 'react'
 import Login from './components/Login'
 import CaseGenerator from './components/CaseGenerator'
