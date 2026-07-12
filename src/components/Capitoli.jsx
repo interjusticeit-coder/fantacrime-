@@ -38,6 +38,14 @@ export default function Capitoli({ caso, onUltimoCapitolo }) {
 
   return (
     <div>
+      {caso.concluso && (
+        <div
+          className="card"
+          style={{ background: '#a63d40', color: '#ffffff', marginBottom: 12 }}
+        >
+          <strong>Caso risolto</strong> — colpevole dichiarato: {caso.colpevole_finale}
+        </div>
+      )}
       <h3 style={{ marginBottom: 8 }}>In onda — Capitoli del caso</h3>
       {capitoli.map((c) => (
         <div className="card" key={c.id}>
