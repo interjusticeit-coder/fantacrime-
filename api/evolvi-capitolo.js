@@ -29,11 +29,91 @@ const PESO_NOTIZIE = 0.9
 const PESO_GIOCATORI = 0.1
 const DELTA_MIN = -10
 const DELTA_MAX = 10
+const SOGLIA_CHIUSURA = 50
 
 const TAG_VALIDI = ['colpo di scena', 'cronaca', 'normale']
 
 function clamp(numero, min, max) {
   return Math.max(min, Math.min(max, numero))
+}
+
+// Somma i punteggi_ruoli di tutti i capitoli di un caso (inclusi quelli
+// appena inseriti), per sapere il totale cumulativo di ciascun ruolo.
+function calcolaCumulativi(tuttiCapitoli, ruoli) {
+  const cumulativi = {}
+  for (const ruolo of ruoli) cumulativi[ruolo] = 0
+
+  for (const cap of tuttiCapitoli) {
+    const punteggi = cap.punteggi_ruoli || {}
+    for (const ruolo of ruoli) {
+      cumulativi[ruolo] += punteggi[ruolo] || 0
+    }
+  }
+  return cumulativi
+}
+
+// Trova il ruolo col cumulativo più alto. Se supera la soglia, quel
+// ruolo "vince" ed è il momento di chiudere il caso.
+function trovaRuoloSopraSoglia(cumulativi) {
+  let ruoloMax = null
+  let valoreMax = -Infinity
+  for (const [ruolo, valore] of Object.entries(cumulativi)) {
+    if (valore > valoreMax) {
+      valoreMax = valore
+      ruoloMax = ruolo
+    }
+  }
+  if (ruoloMax !== null && valoreMax >= SOGLIA_CHIUSURA) {
+    return { ruolo: ruoloMax, valore: valoreMax }
+  }
+  return null
+}
+
+// Genera il testo dell'epilogo. Prova con Claude per un tono narrativo
+// coerente col resto del caso; se la chiamata fallisce per qualsiasi
+// motivo, usa un template fisso così il caso si chiude comunque.
+async function generaEpilogo({ anthropicKey, caso, ruoloColpevole, valorePunti }) {
+  const promptEpilogo = `Sei lo sceneggiatore del gioco "fantacrime", in italiano.
+
+Caso concluso: "${caso.titolo}"
+Scena: ${caso.scena}
+
+I dati e le teorie dei giocatori, capitolo dopo capitolo, hanno puntato
+sempre più decisamente su un colpevole: ${ruoloColpevole}.
+
+Scrivi un breve epilogo (3-5 frasi) che chiude il caso, dichiarando
+${ruoloColpevole} come il colpevole, con un tono conclusivo da giallo.
+Rispondi SOLO con il testo dell'epilogo, senza introduzioni, senza
+virgolette, senza markdown.`
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: promptEpilogo }]
+      })
+    })
+
+    if (!response.ok) throw new Error('chiamata fallita')
+
+    const data = await response.json()
+    const blocchiTesto = (data.content || []).filter((b) => b.type === 'text')
+    const testo = blocchiTesto.map((b) => b.text).join('\n').trim()
+
+    if (testo) return testo
+    throw new Error('nessun testo')
+  } catch {
+    // Fallback deterministico, se Claude non risponde bene: il caso si
+    // chiude comunque, mai lasciarlo bloccato.
+    return `Il caso si chiude. Le prove raccolte capitolo dopo capitolo convergono su un solo nome: ${ruoloColpevole}. Con ${valorePunti} punti di sospetto accumulati, ogni dubbio residuo si dissolve. Il caso "${caso.titolo}" è ufficialmente risolto.`
+  }
 }
 
 // Estrae il primo oggetto JSON plausibile da un testo, anche se Claude
@@ -199,6 +279,13 @@ export default async function handler(req, res) {
     if (casoError) throw casoError
     if (!caso) return res.status(200).json({ skipped: true, motivo: 'Nessun caso attivo.' })
 
+    if (caso.concluso) {
+      return res.status(200).json({
+        skipped: true,
+        motivo: `Il caso è già concluso. Colpevole dichiarato: ${caso.colpevole_finale}.`
+      })
+    }
+
     const ruoli = caso.ruoli || []
     if (ruoli.length === 0) {
       return res.status(200).json({ skipped: true, motivo: 'Il caso non ha ruoli su cui assegnare punteggi.' })
@@ -312,10 +399,61 @@ ruolo elencato sopra in entrambi punteggio_notizie e punteggio_giocatori):
 
     if (insertError) throw insertError
 
+    // 7. Calcoliamo i punteggi cumulativi (tutti i capitoli, incluso
+    // quello appena inserito) per vedere se qualche ruolo ha superato
+    // la soglia di chiusura del caso
+    const { data: tuttiCapitoli, error: tuttiCapError } = await supabase
+      .from('capitoli')
+      .select('punteggi_ruoli')
+      .eq('caso_id', caso.id)
+
+    if (tuttiCapError) throw tuttiCapError
+
+    const cumulativi = calcolaCumulativi(tuttiCapitoli || [], ruoli)
+    const vincitore = trovaRuoloSopraSoglia(cumulativi)
+
+    let epilogo = null
+
+    if (vincitore) {
+      const testoEpilogo = await generaEpilogo({
+        anthropicKey,
+        caso,
+        ruoloColpevole: vincitore.ruolo,
+        valorePunti: vincitore.valore
+      })
+
+      const { data: capitoloEpilogo, error: epilogoError } = await supabase
+        .from('capitoli')
+        .insert({
+          caso_id: caso.id,
+          numero: prossimoNumero + 1,
+          testo: testoEpilogo,
+          tag: 'colpo di scena',
+          eventi_reali: [],
+          punteggi_ruoli: {}
+        })
+        .select()
+        .single()
+
+      if (epilogoError) throw epilogoError
+
+      const { error: chiusuraError } = await supabase
+        .from('casi')
+        .update({ concluso: true, colpevole_finale: vincitore.ruolo })
+        .eq('id', caso.id)
+
+      if (chiusuraError) throw chiusuraError
+
+      epilogo = capitoloEpilogo
+    }
+
     return res.status(200).json({
       ok: true,
       capitolo: nuovoCapitolo,
-      punteggi_ruoli: punteggiRuoli
+      punteggi_ruoli: punteggiRuoli,
+      cumulativi,
+      caso_concluso: Boolean(vincitore),
+      epilogo
     })
   } catch (err) {
     console.error('Errore in evolvi-capitolo:', err)
