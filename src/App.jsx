@@ -3,8 +3,6 @@ import Login from './components/Login'
 import CaseGenerator from './components/CaseGenerator'
 import Commenti from './components/Commenti'
 import Capitoli from './components/Capitoli'
-import TeamCreator from './components/TeamCreator'
-import TeamsList from './components/TeamsList'
 import Leaderboard from './components/Leaderboard'
 import OnAir from './components/OnAir'
 import VotoSospettato from './components/VotoSospettato'
@@ -42,8 +40,6 @@ export default function App() {
 
   const navItems = [
     { key: 'caso', label: 'Caso' },
-    { key: 'squadra', label: 'Crea' },
-    { key: 'squadre', label: 'Squadre' },
     { key: 'classifica', label: 'Classifica' },
     { key: 'onda', label: 'In onda' }
   ]
@@ -77,8 +73,6 @@ export default function App() {
               <Commenti caso={casoAttuale} utente={utente} />
             </>
           )}
-          {tab === 'squadra' && <TeamCreator caso={casoAttuale} utente={utente} />}
-          {tab === 'squadre' && <TeamsList caso={casoAttuale} />}
           {tab === 'classifica' && <Leaderboard />}
           {tab === 'onda' && <OnAir caso={casoAttuale} />}
         </div>
