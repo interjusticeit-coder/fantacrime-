@@ -21,12 +21,18 @@ export default function OnAir({ caso }) {
         setUltimoCapitolo(capitolo)
       }
 
-      const { data: punteggi } = await supabase
-        .from('punteggi')
-        .select('utente, punti')
-        .order('punti', { ascending: false })
-        .limit(5)
-      setTop5(punteggi || [])
+      // La classifica ora arriva dall'endpoint /api/classifica, che
+      // somma i punti reali guadagnati dai voti sui ruoli (non più
+      // dalla vecchia tabella "punteggi", mai popolata dal nuovo motore)
+      try {
+        const risposta = await fetch('/api/classifica')
+        if (risposta.ok) {
+          const dati = await risposta.json()
+          setTop5((dati.classifica || []).slice(0, 5))
+        }
+      } catch {
+        setTop5([])
+      }
 
       setLoading(false)
     }
@@ -66,13 +72,13 @@ export default function OnAir({ caso }) {
         <p style={{ color: 'var(--soft)', fontSize: 14 }}>Ancora nessun punteggio registrato.</p>
       )}
       {top5.map((entry, idx) => (
-        <div className="leaderboard-row" key={entry.utente}>
+        <div className="leaderboard-row" key={entry.nome_utente}>
           <div style={{ width: 20, fontFamily: 'Archivo, sans-serif', fontWeight: 800, color: idx === 0 ? 'var(--purple-text)' : 'var(--muted)' }}>
             {idx + 1}
           </div>
-          <div style={{ flex: 1, fontWeight: 700 }}>{entry.utente}</div>
+          <div style={{ flex: 1, fontWeight: 700 }}>{entry.nome_utente}</div>
           <div style={{ fontWeight: 800, fontFamily: 'Archivo, sans-serif' }}>
-            {entry.punti} <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)' }}>pt</span>
+            {entry.punti_totali} <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)' }}>pt</span>
           </div>
         </div>
       ))}
