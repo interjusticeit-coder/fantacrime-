@@ -59,7 +59,7 @@ export default function Leaderboard() {
       <div style={stili.contenitore}>
         <h2 style={stili.titolo}>Classifica</h2>
         <div style={stili.vuoto}>
-          Nessun punto assegnato ancora. Scrivi una teoria e aspetta il prossimo capitolo.
+          Nessun voto ancora. Punta su un sospettato e aspetta il prossimo capitolo.
         </div>
       </div>
     )
@@ -77,7 +77,7 @@ export default function Leaderboard() {
             <div style={stili.infoGiocatore}>
               <div style={stili.nome}>{giocatore.nome_utente}</div>
               <div style={stili.dettaglio}>
-                {giocatore.teorie_confermate} confermate · {giocatore.teorie_smentite} smentite
+                {giocatore.voti_totali} {giocatore.voti_totali === 1 ? 'voto' : 'voti'} dati
               </div>
             </div>
             <div style={stili.punti}>{giocatore.punti_totali}</div>
